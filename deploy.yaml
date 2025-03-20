@@ -1,0 +1,47 @@
+name: Deploy Static Site with Terraform
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: latest
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1  # Change as needed
+
+    - name: Initialize Terraform
+      run: terraform init
+
+    - name: Apply Terraform Configuration
+      run: terraform apply -auto-approve
+
+    - name: Get EC2 Public IP
+      id: get_ip
+      run: echo "EC2_HOST=$(terraform output -raw public_ip)" >> $GITHUB_ENV
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v0.1.4
+      with:
+        host: ${{ env.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        script: |
+          cd /var/www/html
+          git pull origin main
+          systemctl restart nginx
